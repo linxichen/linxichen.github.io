@@ -3,5 +3,9 @@ permalink: /research/
 title: "Research"
 ---
 
-**Asymmetric Inventory Dynamics and Product Market Search** (Job Market Paper):
-Why does inventory investment accounts for on average 72% of GDP decline during recessions but only 8% during expansions? Why does inventory-sales ratio ceases to be countercyclical since 1990s but continue to lag GDP for 4 quarters? These newly documented stylized facts pose challenges to existing macroeconomic models with inventories and cast doubts on important conclusions drawn from standard models. In this paper I show that incorporating product market search friction in a standard inventory model can address these stylized facts. Product market search enhances firms’ asymmetric trade-off between accumulating inventory and adjusting markup, and thus generates strong asymmetric share of inventory investment in GDP movements. Product market search also generates the lagging inventory-sales ratio because in expansions (recessions) households’ procyclical effort to search for varieties increases (decreases) sales and inventory holding at the early stage of expansions (recessions). Its effects, however, are later eclipsed by heightened (lowered) return to holding inventory which only increases (decreases) inventory stock. The model is empirically disciplined with micro evidence provided by recent empirical studies and its behavior is consistent with inventory and business cycle stylized facts in the US, in addition to explaining the two newly documented inventory stylized facts and being broadly consistent with observed business cycle asymmetries. [PDF]({{ site.url }}/assets/pdfs/jmp.pdf)
+**Index + Factors + Alpha** (*Financial Analyst Journal, Volume 77, 2021*) [Link](https://www.tandfonline.com/doi/abs/10.1080/0015198X.2021.1960782)
+
+**China's Capacity Reduction Reform and Its Impact on Producer Prices** (*IMF Working Paper WP/18/216, 2018*) [Link](https://www.elibrary.imf.org/view/journals/001/2018/216/article-A001-en.xml) [Vox China article](https://www.voxchina.org/show-3-108.html)
+
+
+**Asymmetric Inventory Dynamics and Product Market Search** (*Job Market Paper*, 2017) [PDF]({{ site.url }}/assets/pdfs/jmp.pdf)
