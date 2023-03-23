@@ -58,7 +58,7 @@ plugins:
 author:
   name   : "Linxi Chen"
   avatar : "/assets/images/bio-photo.jpg"
-  bio    : "I am current a Quantitative Researcher at BlackRock. Ph.D. in Economics from Duke. Proudly from Guangzhou, China. Macroeconomics, Finance, Computation."
+  bio    : "I am currently a Quantitative Researcher at BlackRock. Proudly from Guangzhou, China. Macroeconomics, Finance, Computation."
   links:
     - label: "Google Scholar"
       icon: "fas fa-fw fa-link"
