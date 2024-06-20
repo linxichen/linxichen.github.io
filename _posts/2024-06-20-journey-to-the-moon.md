@@ -1,5 +1,6 @@
 ---
 title: "Journey to the Moon"
+layout: posts
 date: 2024-06-20T01:51:30-05:00
 categories:
   - blog
