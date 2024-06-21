@@ -7,7 +7,5 @@ main:
     url: /posts/
   - title: "Fun Stuff"
     url: /toys/
-  - title: "Categories"
-    url: /categories/
   - title: "Tags"
     url: /tags/
