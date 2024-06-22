@@ -14,22 +14,23 @@
 # You can create any custom variable you would like, and they will be accessible
 # in the templates via {{ site.myvariable }}.
 title: Linxi's Site
-email:
+email: linxichen88@gmail.com
 description: >- # this means to ignore newlines until "baseurl:"
   Welcome to my site.
 twitter_username: username
 github_username: linxichen
-minimal_mistakes_skin: dirt
+minimal_mistakes_skin: air
 search: true
 
 # Build settings
 markdown: kramdown
-remote_theme: mmistakes/minimal-mistakes@4.26.2
+remote_theme: mmistakes/minimal-mistakes
 # Outputting
 permalink: /:categories/:title/
 paginate: 5 # amount of posts to show
 paginate_path: /page:num/
 timezone: # https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
+repository: linxichen/linxichen.github.io
 
 include:
   - _pages
@@ -46,7 +47,7 @@ include:
 #   - vendor/gems/
 #   - vendor/ruby/
 
-# Plugins (previously gems:)
+# Plugins ()
 plugins:
   - jekyll-paginate
   - jekyll-sitemap
@@ -92,6 +93,14 @@ footer:
       # icon: "fab fa-fw fa-instagram"
       # url: "https://instagram.com/"
 
+enable_copy_code_button: true
+
+comments:
+  provider: "disqus"
+  disqus:
+    shortname: "lxchome"
+
+
 defaults:
   # _posts
   - scope:
@@ -111,6 +120,7 @@ defaults:
     values:
       layout: single
       author_profile: true
+      comments: true
 
 category_archive:
   type: liquid
