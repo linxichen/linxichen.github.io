@@ -24,6 +24,11 @@ Build with trace to see errors:
 bundle exec jekyll build --trace
 ```
 
+Some features (e.g. comments) only show up in production mode. You willneed to set your environment variable to do that. Debian/Ubuntu example:
+```sh
+export JEKYLL_ENV=production
+```
+
 ## Customization
 #### Adding Favicon
 Follow this [post](https://peateasea.de/add-favicon-to-mm-jekyll-site/)
