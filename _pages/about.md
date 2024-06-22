@@ -2,6 +2,8 @@
 permalink: /
 title: "About"
 layout: single
+comments: false
+toc: false
 ---
 
 Welcome to my site. I am a New York based Quantitative Researcher. I got my Econ Ph.D. from Duke and now working on various interesting projects in both Finance and Macro.
