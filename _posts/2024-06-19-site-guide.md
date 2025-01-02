@@ -9,6 +9,10 @@ tags:
 ---
 
 ## Local Develop and Preview
+### Install Ruby and Jekyll
+Follow this [post](https://jekyllrb.com/docs/installation/ubuntu/)
+
+### Update Gems
 Update Gems
 ```sh
 bundle update

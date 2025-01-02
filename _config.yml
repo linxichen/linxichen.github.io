@@ -23,7 +23,10 @@ minimal_mistakes_skin: air
 search: true
 
 # Build settings
-markdown: kramdown
+markdown: 
+  kramdown:
+    input: GFM
+    math_engine: mathjax
 remote_theme: mmistakes/minimal-mistakes
 # Outputting
 permalink: /:categories/:title/
