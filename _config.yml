@@ -63,7 +63,7 @@ plugins:
 author:
   name   : "Linxi Chen"
   avatar : "/assets/images/bio-photo.jpg"
-  bio    : "Quantitative Researcher Based in New York and proudly from Guangzhou, China. Married +2. \n \n Macroeconomics, Finance, Computation, and tinkering."
+  bio    : "Quantitative Researcher Based in New York. Originally from Guangzhou, China. Married +2. \n \n Macroeconomics, Finance, Computation, and tinkering with things broken or not."
   links:
     - label: "linxichen88@gmail.com"
       icon: "fas fa-fw fa-at"
