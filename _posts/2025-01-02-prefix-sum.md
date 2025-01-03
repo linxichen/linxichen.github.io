@@ -10,38 +10,34 @@ tags:
   - Prefix Sum
 ---
 
-Just a clever algorithm by Guy Blelloch to simulate linear recurrence relations in parallel.
+This post explores a clever algorithm by Guy Blelloch for simulating linear recurrence relations in parallel.
 
 ## Problem Formulation
-Let's say I am trying to simulate a AR(1) process:
+Consider the simulation of an AR(1) process:
 $$
 X_t = A X_{t-1} + \epsilon_t
 $$  
-... but in parallel using GPUs. Obviously, the desired output is a some sort of prefix sum. We
-need to find a smart operator that is associative so that we compute the prefix sum in parallel over the time dimension.
+The challenge is to simulate this process in parallel using GPUs. Since the process inherently depends on previous values, we need a prefix sum computation. The key is finding a smart operator that is associative, allowing us to compute the prefix sum in parallel over the time dimension.
 
 ## The Associative Operator
-Consider this operator $\cdot$ on two-tuples of the form $C_t=\left[C_t^a, C_t^b\right]$.
-Basically a two-tuple of two elements a and b.  
+Let's define an operator $\cdot$ that works on two-tuples of the form $C_t=\left[C_t^a, C_t^b\right]$, where each tuple contains two elements a and b.
 
-Now the operator $\cdot$ is defined as:
+The operator $\cdot$ is defined as:
 $$
 C_{t-1} \cdot C_t=\left[C_{t-1}^a \times C_{t, 1}^a,\left( C_{t-1}^b \times C_t^a \right) +C_t^b \right]
 $$  
 
-The output is again a two-tuple.  
-
-This operator $\cdot$ is associative as Blelloch shows. A quick "convince yourself" is in the appendix.
+This operator $\cdot$ produces another two-tuple and is associative (proof in appendix).
 
 ## Simulation with the Associative Operator
-Now WLOG let's assume $X_0=0$. Define 
+Without loss of generality, assume $X_0=0$. Define 
 $$
 C_t = (A, \epsilon_t)
 $$  
 
-Call $S_t$ the prefix sum at time $t$. Initialize $S_0 = (A^0, X_0)$.
+Let $S_t$ denote the prefix sum at time $t$, with initial value $S_0 = (A^0, X_0)$.
 
-Now we can work through a few steps to see how this operator $\cdot$ can be used to compute the prefix sum.
+The following steps demonstrate how the operator $\cdot$ computes the prefix sum:
 
 $$
 \begin{aligned}
@@ -57,7 +53,8 @@ S_3 & =S_2 \cdot C_3 \\
 & =\left[A^3, A x_2+\epsilon_3\right]
 \end{aligned}
 $$  
-In general, we can see the elements of $S_t$ form two sequences: the first sequence (call it $y_t$) is the cumulative product of $A$ and the second sequence is $X_t$.  
+
+We can observe that $S_t$ consists of two sequences: the first sequence ($y_t$) represents the cumulative products of $A$, while the second sequence is our desired $X_t$:
 $$
 \begin{aligned}
 S_t & =\left[y_t, x_t\right] \\
@@ -68,8 +65,8 @@ S_t & =\left[y_t, x_t\right] \\
 \end{aligned}
 $$  
 
-# Code Example with Jax
-Now we can use pytree in Jax to represent the two tuple and use the `jax.lax.associative_scan` to compute the prefix sum. Cross-check with the sequential simulation code using `jax.lax.scan` for correctness.
+# Implementation in JAX
+The following code demonstrates the implementation using JAX's pytree to represent the two-tuple and `jax.lax.associative_scan` for parallel prefix sum computation. We verify correctness by comparing with sequential simulation using `jax.lax.scan`.
 
 ```python
 # %%
@@ -116,7 +113,7 @@ print(f"The maximum discrepancy is {err}")
 ```
 
 # Appendix
-## Verify associative property of $\cdot$
+## Verification of Associative Property
 
 $$
 \begin{aligned}
@@ -128,7 +125,8 @@ S_1 \cdot\left(c_2 \cdot c_3\right) & =S_1 \cdot\left(\left[A, \epsilon_2\right]
 & =\left[A^3, x_3^3\right]
 \end{aligned}
 $$  
-because we know:  
+
+This equality holds because:
 $$
 \begin{aligned}
 x_3 & =A x_2+\epsilon_3 \\
