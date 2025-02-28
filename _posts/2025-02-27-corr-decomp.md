@@ -35,18 +35,14 @@ $$
 **Derivation Walkthrough:**  
 
 1. **Euler Theorem for Bilinear Covariance**:  
-   Covariance \(\text{Cov}(r_A, r_B)\) is a **bilinear function** (homogeneous of degree 2 in portfolio weights). Scaling both portfolios by \(t\):  
-   \[
+   Covariance $\text{Cov}(r_A, r_B)$ is a **bilinear function**:  
+   $$
    \text{Cov}(t r_A, t r_B) = t^2 \cdot \text{Cov}(r_A, r_B)
-   \]  
-   By Euler’s theorem for degree \(k=2\):  
-   \[
+   $$  
+   By Euler's theorem:  
+   $$
    \sum_{k=1}^N \left( w_{A_k} \cdot \frac{\partial \text{Cov}(r_A, r_B)}{\partial w_{A_k}} + w_{B_k} \cdot \frac{\partial \text{Cov}(r_A, r_B)}{\partial w_{B_k}} \right) = 2 \cdot \text{Cov}(r_A, r_B)
-   \]  
-   To resolve double-counting, we introduce a \(1/2\) adjustment factor:  
-   \[
-   \text{Contribution}(k) = \frac{1}{2} \left( w_{A_k} \cdot \frac{\partial \text{Cov}(r_A, r_B)}{\partial w_{A_k}} + w_{B_k} \cdot \frac{\partial \text{Cov}(r_A, r_B)}{\partial w_{B_k}} \right)
-   \]  
+   $$  
    _Intuition_: The factor \(1/2\) fairly splits covariance contributions between portfolios \(A\) and \(B\).  
 
 2. **Express Partial Derivatives**:  
