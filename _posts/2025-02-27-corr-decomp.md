@@ -64,9 +64,9 @@ $$
 
 **Key Takeaways**:  
 
-- **Dual Dependence**: Contributions depend on correlations between **both portfolios** and asset \(k\).  
-- **Volatility Scaling**: Higher asset volatility (\(\sigma_k\)) amplifies impact.  
-- **Normalized Weights**: Weights are scaled by portfolio volatilities (\(\sigma_A, \sigma_B\)), penalizing riskier allocations.  
+- **Dual Dependence**: Contributions depend on correlations between **both portfolios** and asset $k$.  
+- **Volatility Scaling**: Higher asset volatility ($\sigma_k$) amplifies impact.  
+- **Normalized Weights**: Weights are scaled by portfolio volatilities ($\sigma_A, \sigma_B$), penalizing riskier allocations.  
 
 This formula quantifies how shared holdings drive portfolio correlation, enabling precise adjustments for diversification or systemic risk management.  
 
