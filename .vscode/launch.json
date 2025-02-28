@@ -3,22 +3,19 @@
     "configurations": [
         {
             "name": "Jekyll Serve",
-            "type": "pwa-chrome",
+            "type": "pwa-node",
             "request": "launch",
-            "program": "bundle",
-            "args": [
+            "runtimeExecutable": "bundle",
+            "runtimeArgs": [
                 "exec",
                 "jekyll",
                 "serve",
                 "--watch",
-                "--livereload"
+                "--livereload",
+                "--open-url"
             ],
             "console": "integratedTerminal",
-            "serverReadyAction": {
-                "pattern": "Server address: (https?://.+)",
-                "uriFormat": "%s",
-                "action": "openExternally"
-            }
+            "internalConsoleOptions": "neverOpen"
         }
     ]
 }
