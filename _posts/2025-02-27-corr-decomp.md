@@ -70,10 +70,4 @@ $$
 
 This formula quantifies how shared holdings drive portfolio correlation, enabling precise adjustments for diversification or systemic risk management.  
 
-Best regards,  
-[Your Name]  
-
----
-
-Copy-paste this into any markdown-supported editor for proper rendering.
 
