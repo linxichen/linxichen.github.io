@@ -1,0 +1,24 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Jekyll Serve",
+            "type": "pwa-chrome",
+            "request": "launch",
+            "program": "bundle",
+            "args": [
+                "exec",
+                "jekyll",
+                "serve",
+                "--watch",
+                "--livereload"
+            ],
+            "console": "integratedTerminal",
+            "serverReadyAction": {
+                "pattern": "Server address: (https?://.+)",
+                "uriFormat": "%s",
+                "action": "openExternally"
+            }
+        }
+    ]
+}
