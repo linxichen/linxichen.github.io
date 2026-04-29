@@ -14,6 +14,12 @@ tags:
 
 ## TL;DR
 
+> **⚠ Status: Partial solution.** This launcher protects keys used directly by
+> Hermes (LLM providers, tool APIs), but Hermes intentionally filters the
+> environment for subprocesses it spawns (MCP servers, gateway platforms like
+> BlueBubbles). Those still need plaintext keys in `.env`. For most non-trivial
+> setups, keeping everything in `.env` is simpler and more reliable.
+
 Replace plaintext API keys in `~/.hermes/.env` with `op://` secret references. A
 tiny launcher script resolves secrets from 1Password at runtime using `op read`
 — nothing sensitive lives on disk. Survives Hermes updates, works in scripts,
@@ -301,6 +307,23 @@ grep -n 'DEEPSEEK_API_KEY' ~/.hermes/.env
 | Sub-agent delegation | ✓ Non-interactive shells work |
 | Changing API keys in 1Password | ✓ No file changes needed — just restart Hermes |
 | TUI display | ✓ All terminal env vars preserved |
+| MCP subprocesses | ✗ Hermes filters env for MCP servers — keys must be in config.yaml |
+| BlueBubbles / gateway services | ✗ Run as separate processes, bypass launcher entirely |
+
+> **⚠ Important caveat:** The launcher only works when you invoke `hermes` from
+> your shell. Any subprocess that Hermes spawns (MCP servers, platform gateways
+> like BlueBubbles, sub-agents launched via `delegate_task`) does NOT inherit
+> the injected secrets. Hermes intentionally filters the environment for these
+> child processes for security reasons. API keys needed by those subprocesses
+> (e.g., MCP server credentials) must still be in `~/.hermes/.env`.
+>
+> **Bottom line:** This launcher is a partial solution. It protects keys used
+> directly by Hermes (LLM providers, tool APIs called by the agent itself).
+> Keys consumed by Hermes's own subprocesses (MCP, gateway platforms) still
+> need to live in `.env`. In practice, this limits the approach — most
+> non-trivial Hermes setups end up with keys in both places, defeating the
+> zero-plaintext goal. For now, keeping everything in `.env` (with 1Password
+> as the source of truth for rotation) is the simpler, more reliable option.
 
 ---
 
