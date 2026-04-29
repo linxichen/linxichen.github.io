@@ -87,9 +87,14 @@ authenticate:
 echo 'OP_SERVICE_ACCOUNT_TOKEN=ops_your_token_here' >> ~/.hermes/.env
 ```
 
+> **No need to put this in `.zshrc` or `.bashrc`.** The launcher sources
+> `~/.hermes/.env` automatically before resolving secrets — the token stays in
+> one place.
+
 Verify connectivity:
 
 ```bash
+# The launcher will source .env automatically, but you can test manually:
 export OP_SERVICE_ACCOUNT_TOKEN="$(grep OP_SERVICE_ACCOUNT_TOKEN ~/.hermes/.env | cut -d= -f2-)"
 op whoami
 # Should show: User Type: SERVICE_ACCOUNT
