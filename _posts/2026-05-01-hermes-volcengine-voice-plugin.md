@@ -128,15 +128,85 @@ def patched_tts(text, output_path=None):
 tts_module.text_to_speech_tool = patched_tts
 ```
 
-## 踩过的坑
+## 真实调试记录：STT 不工作的 48 小时
 
-1. **Ark Key vs Speech Key**：火山引擎的大模型平台（Ark）和语音平台是**独立产品**，Key 不互通。用 Ark Key 调语音 API 会 401。
+教程写完了，插件发布了——然后用户在实际使用中发现：**语音频道里说话完全没反应**。
 
-2. **音色版本**：1.0 音色（如 `zh_female_shuangkuaisisi_moon_bigtts`）需要 `resource_id: seed-tts-1.0`，2.0 音色（如 `zh_female_shuangkuaisisi_uranus_bigtts`）需要 `resource_id: seed-tts-2.0`。混用会报 `55000000: resource ID mismatched`。
+### 症状
 
-3. **Config 里的 speaker 是短名**：config.yaml 配置项会自动通过 VOICES 字典解析为完整 voice_type，不要直接写 `zh_female_shuangkuaisisi_uranus_bigtts`。
+- Bot 能正常加入语音频道 ✓
+- Discord SPEAKING 事件正常触发 ✓
+- 但转录结果始终为空，用户说的话石沉大海 ✗
 
-4. **Plugin import 路径**：Hermes 插件加载器使用 ``hermes_plugins`` 命名空间。插件内部导入 TTS/STT 模块时必须用 ``from hermes_plugins.volcengine_voice.tts import ...``，不能用 ``from plugins.volcengine_voice...``。
+### 排查过程
+
+**第一步：确认音频采集正常**
+
+检查 gateway 日志，SPEAKING 事件确实在触发：
+
+```
+SPEAKING event: ssrc=498 -> user=1490217802425172008
+```
+
+RTP 包正常解密，Opus 解码成功，PCM→WAV 转换也没问题。问题在 STT 环节。
+
+**第二步：直接测试 Volcengine API**
+
+绕开插件系统，写了一个裸 WebSocket 脚本直接连 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`，逐字节 dump 服务端返回的二进制帧：
+
+```
+=== Response #2 ===
+Header: 0x11931000
+msg_type=0b1001  flags=0b0011  (LAST_NEGATIVE_SEQUENCE)
+Payload size: 1  ← 只有 1 字节?!
+Payload: 0x00     ← 空字节
+```
+
+1 字节的 payload？这不对。看原始 hex：
+
+```
+1193100000000001000000677b22617564696f5f696e666f223a7b...
+```
+
+仔细对照官方文档的二进制协议，发现了关键错误——
+
+**第三步：找到根因——Sequence Number 偏移**
+
+Volcengine 的 Full Server Response 格式是：
+
+```
+Header (4B) | Sequence (4B，当 flags=0b0001/0b0011) | PayloadSize (4B) | Payload
+```
+
+当服务端返回 `flags=0b0011`（最后一包，带负 sequence）时，Header 后的 4 字节是 **Sequence Number**（值 `0x00000001`），而不是 Payload Size。
+
+插件代码把 Sequence 当成了 Size，读出来是 1，然后取了 1 字节 payload（一个空字节 `0x00`）。真正的 JSON payload（103 字节）被跳过了。
+
+**第四步：第二个 Bug——响应 JSON 结构变化**
+
+修复偏移后，成功拿到了 JSON：
+
+```json
+{"audio_info":{"duration":3000},"result":{"additions":{"log_id":"..."}}}
+```
+
+但还是没有文字！原来 v3 API 的转录文本在 `result.text`，而插件代码在找 `payload_msg.result`（旧版路径）。
+
+### 修复
+
+两个 commit 修复了 `stt.py`：
+
+1. 根据 `flags` 判断是否有 Sequence 字段，动态调整 payload 偏移
+2. 新增 `_extract_asr_text()` 函数，优先读取 v3 格式的 `result.text`，回退到旧格式
+
+### 教训
+
+1. **直接测 API，不要靠日志猜**。写一个裸 WebSocket 调试脚本，逐字节 hex dump，比看日志快 10 倍。
+2. **二进制协议的"小字段"偏移错误**是最难发现的 bug——多读了 4 字节，整个响应就全乱套了。
+3. **官方文档是最好的调试工具**。对照文档逐字段核对 header 的 bit layout，几分钟就定位到了问题。
+4. **本地 STT 是保底方案**。调试期间切到 `stt.provider: local`（faster-whisper），不需要重启就能走通流程，验证音频采集和 silence detection 都没问题。
+
+插件修复已推送到 [GitHub](https://github.com/linxichen/hermes-volcengine-voice)。
 
 ## 效果
 
