@@ -208,6 +208,51 @@ Header (4B) | Sequence (4B，当 flags=0b0001/0b0011) | PayloadSize (4B) | Paylo
 
 插件修复已推送到 [GitHub](https://github.com/linxichen/hermes-volcengine-voice)。
 
+## 第二个调试回合：Voice Channel 里能听到我吗？
+
+STT 协议修好了，以为万事大吉——结果用户一进语音频道，**连 SPEAKING 事件都没有**。
+
+### 症状
+
+- VoiceReceiver 正常启动 ✓
+- SPEAKING hook 安装成功 ✓
+- 但日志里没有任何 `SPEAKING event`，没有任何 UDP 包
+- 5 分钟后自动超时断开（`VOICE_TIMEOUT=300`）
+
+### 根因：Stale WebSocket
+
+Gateway 进程一直没重启（从调试开始就运行着），Discord 语音频道的内部 WebSocket 连接在长时间无活动后变 stale。表面上连着，实际上收不到任何事件。
+
+**解决**：`/voice leave` → `/voice channel` 重新加入，WebSocket 重建，问题消失。
+
+### 延迟分析
+
+修好后做了完整的 latency breakdown：
+
+```
+19:49:00.727  语音采集完成（含 1.5s 静音阈值判断）
+19:49:01.140  STT 转录完成 ✅  (413ms！火山引擎确实快)
+19:49:13.609  LLM 回复完成     (12.5s — deepseek-v4-pro)
+19:49:15.040  TTS 开始播放
+```
+
+瓶颈在 LLM（12.5s），不是 STT。火山引擎 ASR 的 413ms 延迟完全够用。如果想进一步降低延迟，可以：
+
+1. 把 voice channel 绑定的模型切到 `deepseek-chat`（更快但质量稍低）
+2. 调低静音阈值 `silence_duration: 1.0`（从 3.0s 降到 1.0s）
+
+### 修复：Voice 用户名显示
+
+转录到的消息显示的是 raw Discord user ID（`1490217802425172008`）而不是用户名。Gateway 的 `_handle_voice_channel_input` 函数直接用了 `str(user_id)` 作为 `user_name`。修复通过 `guild.get_member()` 解析 display name：
+
+```python
+guild = adapter._client.get_guild(guild_id)
+member = guild.get_member(user_id)
+user_name = member.display_name if member else str(user_id)
+```
+
+这个修复也提交到了 hermes-agent 的 fork，等待 PR。
+
 ## 效果
 
 配置完成后，所有平台——Discord、Telegram、iMessage——的语音交互都会自动走火山引擎。实测中文合成质量远超 Edge TTS，识别准确率也很高，支持中英混合。
