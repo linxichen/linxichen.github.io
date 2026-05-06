@@ -51,7 +51,7 @@ git clone https://github.com/linxichen/hermes-volcengine-voice.git \
 ### 设置 API Key
 
 ```bash
-echo 'VOLCENGINE_VOICE_API_KEY=你的API-Key' >> ~/.hermes/.env
+echo 'VOLCENGINE_VOICE_API_KEY=你的API-Key' >> ~/.hermes/env.d/volcengine.env
 ```
 
 ### 切换到火山引擎
