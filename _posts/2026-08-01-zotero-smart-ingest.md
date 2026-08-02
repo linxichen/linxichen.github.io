@@ -2,7 +2,7 @@
 title: "zotero-smart-ingest: An Agent Skill That Puts Papers in Zotero (With PDFs, No Duplicates)"
 date: 2026-08-01T10:00:00-04:00
 categories:
-  - Tutorial
+  - Blog
 tags:
   - zotero
   - agent-skills
