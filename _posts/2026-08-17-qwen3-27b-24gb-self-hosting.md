@@ -15,10 +15,10 @@ My agent (Hermes, running on a Mac mini in the house) was "hanging" whenever it 
 
 ## The setup
 
-- **Host**: Dell R7910 (the VM "LinAn" on my XCP-ng GPU box), 16 cores, 64 GB RAM
+- **Host**: a Linux box on my LAN (16 cores, 64 GB RAM)
 - **GPU**: NVIDIA TITAN RTX — 24 GB VRAM, Turing (compute capability 7.5)
 - **Model**: `unsloth/Qwen3.8-27B-GGUF` at **UD-Q4_K_XL** (~17.9 GB on disk)
-- **Server**: `llama-server` from llama.cpp, serving an OpenAI-compatible API at `http://192.168.1.204:8080/v1`
+- **Server**: `llama-server` from llama.cpp, serving an OpenAI-compatible API at `http://<lan-ip>:8080/v1`
 
 Qwen3.8-27B is a native vision-language model with a 262K context window. I wanted it local, wired into my agent as a named provider ("LinxiCloud"), so my chat traffic stops depending on any cloud API.
 
@@ -54,6 +54,8 @@ CUDA was never the bottleneck. Time to do the math.
 ### What the KV cache is
 
 A transformer's attention layer, when generating token *N*, needs to look at the keys and values of **every previous token**. Recomputing those from scratch each step would be quadratic madness, so inference engines cache them: the **KV cache** stores, for every token in the context and every attention layer, a K vector and a V vector.
+
+> **Per-request control**: the `--chat-template-kwargs` flag only sets the server *default*. Clients can override reasoning effort per request with the OpenAI-style `reasoning_effort` field (`"none"`, `"low"`, `"medium"`, `"high"`) — verified against the live server: `none` produces zero thinking tokens, `low` produces a short trace. Agentic clients that want cheap fast turns can send `"none"` while keeping deep thinking for hard prompts.
 
 The cost per token is:
 
@@ -138,3 +140,25 @@ That last number deserves explanation: llama.cpp keeps a **prompt cache** of pro
 6. **Prebuilt Linux CUDA binaries are gone** from llama.cpp releases — budget 15 minutes for the source build, `sudo cmake --install --prefix /usr/local`, and remember `ldconfig`.
 
 The server now backs a named provider in my agent's config — any session can switch to it with `/model custom:LinxiCloud:...` — and the whole stack (quantized weights, KV budget, flash attention, prompt caching) fits in one aging-but-game Turing card. Self-hosting a frontier-adjacent 27B VLM at agent-scale context sizes on 2018 silicon is, it turns out, mostly an accounting exercise.
+
+## What would 2× DGX Spark buy?
+
+Natural question after all this VRAM accounting: what happens on modern hardware? NVIDIA's DGX Spark (formerly Digit) packs a GB10 Grace Blackwell Superchip with **128 GB unified LPDDR5x memory** and claims ~1 PFLOP FP4 / ~100 TFLOPS FP8 dense. Two of them networked via ConnectX-7 (200 Gbps) give you 256 GB of coherent memory. Re-running the same arithmetic:
+
+**Weights**: The model is the same ~17.9 GB — but now there's zero pressure to stay at 4-bit. You could serve the **Q8 / UD-Q8_0 quant (~30 GB)** or even BF16 (~54 GB) and gain real quality, or serve *multiple* models side by side.
+
+**Full KV cache, unquantized**: The headline number. KV at f16 is ~64 KiB/token (32,768 elements × 2 bytes). With 128 GB per node, budget ~85–95 GB for KV after weights and buffers on a single Spark:
+
+| Config | KV budget | Context @ f16 (full precision) |
+|---|---|---|
+| 1× Spark, UD-Q4_K_XL (17.9 GB) | ~95 GB | ~1.55M tokens |
+| 1× Spark, BF16 (54 GB) | ~60 GB | ~985K tokens |
+| 2× Spark, UD-Q4_K_XL (tensor-parallel) | ~200 GB | ~3.3M tokens |
+
+So two Sparks tensor-parallel the same Q4 model with **over 3 million tokens of full-precision KV cache** — the entire 262K native window (17.2 GB at f16) fits with 10× headroom, and you could serve contexts the model card doesn't even advertise. Even a single Spark runs the full 262K window at f16 KV with room to spare.
+
+**Time to first token**: This is where it gets nuanced, because TTFT has two parts. The *compute* side (prompt processing throughput) improves with Blackwell's tensor cores and higher aggregate FLOPS — expect **2–4× the TITAN RTX's 600 tok/s**, so a 27K prompt drops from 45s cold to roughly 10–20s. But LPDDR5x memory bandwidth is the ceiling for token generation: ~273 GB/s per Spark versus the TITAN RTX's 672 GB/s GDDR6. On a memory-bandwidth-bound 27B decode (a single Streamline generation reads all active weights per token), a Spark may generate *slower per token* than the old Turing card. The honest summary: **TTFT on big prompts — much better. Sustained single-stream decode — roughly similar or slightly worse.** The wins are capacity (huge contexts, better quants, multiple models) and batch throughput, not single-stream tok/s.
+
+For an agent workload like mine — giant prompts, short answers — that trade is exactly right: the 3.5s warm-cache turn latency would persist (it's compute-bound on the delta), the 8-minute disaster becomes a 10–20s worst case even cold, and reasoning models that think for hundreds of tokens per turn would benefit from batching multiple concurrent sessions across both nodes. And if 3M-token contexts sound absurd: they're the difference between an agent that forgets the start of a codebase review by the end, and one that doesn't.
+
+*Estimates are back-of-envelope from published specs (128 GB LPDDR5x, ~273 GB/s, GB10 FLOPS claims); real numbers depend on llama.cpp GB10 support maturity, tensor-parallel efficiency over ConnectX-7, and MoE expert-routing patterns.*
