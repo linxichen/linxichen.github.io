@@ -100,7 +100,7 @@ Drop the context to 128K (still enormous for real conversations) and quantize th
 /usr/local/bin/llama-server \
   -hf unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL \
   --mmproj ~/llama.cpp/mmproj-F16.gguf \
-  --host 192.168.1.204 \
+  --host <lan-ip> \
   -c 131072 \
   -ngl 99 \
   -fa on \
