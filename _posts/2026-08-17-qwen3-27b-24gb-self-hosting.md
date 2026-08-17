@@ -130,6 +130,23 @@ Same 27,220-token benchmark:
 
 That last number deserves explanation: llama.cpp keeps a **prompt cache** of processed tokens per slot. When the same prefix arrives again (an agent resends its system prompt + history with one new message appended), only the delta is processed. The 54K prompt that started this whole saga went from *eight minutes* to **45 seconds cold and ~3.5 seconds warm**. The agent, in other words, now gets answers faster than I type follow-ups.
 
+## Bonus round: MTP speculative decoding, 20 → 30 tok/s
+
+Prompt processing was now fine, but token generation sat at ~20 tok/s — a dense 27B on a TITAN RTX is decode-bandwidth-bound (672 GB/s divided by ~18 GB of weights you touch per token). You can't buy more bandwidth, but Qwen3.8 was trained with an **MTP (multi-token prediction) head**, and llama.cpp supports it natively via `--spec-type draft-mtp`. The idea: a small draft model predicts the next few tokens cheaply, the big model verifies them in one batched pass, and accepted drafts are free tokens. Acceptance ~55% with mean accepted length 2.65 gave a **1.5× decode speedup: ~30 tok/s** measured end-to-end.
+
+The catch on 24 GB: the draft head needs VRAM too. The Q8 MTP head (3.2 GB) plus full buffers didn't fit at 131K context, and llama.cpp's default of `--parallel 4` was silently multiplying the KV cache 4×. Final working recipe: **96K context, `--parallel 1`, Q4_0 MTP draft head (1.7 GB)** — 23.6 GB total, ~30 tok/s single-stream. Tradeoffs: 35K less context and one slot (concurrent requests queue instead of interleaving), which is the right trade for a single-agent workload.
+
+```bash
+llama-server -m <model.gguf> \
+  --mmproj <mmproj-F16.gguf> \
+  --host <lan-ip> \
+  -c 98304 --parallel 1 \
+  -ngl 99 -fa on \
+  --cache-type-k q8_0 --cache-type-v q8_0 \
+  --spec-type draft-mtp \
+  --spec-draft-model mtp-Qwen3.8-27B-Q4_0.gguf
+```
+
 ## Lessons worth keeping
 
 1. **GPU usage ≠ GPU-resident.** `nvidia-smi` showing the process and VRAM in use tells you nothing about whether attention is spilling to system RAM. Check the process RSS against the model size, and llama.cpp's buffer logs for "CUDA0" vs "CPU" assignments.
