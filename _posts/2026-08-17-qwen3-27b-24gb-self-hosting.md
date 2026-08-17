@@ -137,15 +137,19 @@ Prompt processing was now fine, but token generation sat at ~20 tok/s — a dens
 The catch on 24 GB: the draft head needs VRAM too. The Q8 MTP head (3.2 GB) plus full buffers didn't fit at 131K context, and llama.cpp's default of `--parallel 4` was silently multiplying the KV cache 4×. Final working recipe: **96K context, `--parallel 1`, Q4_0 MTP draft head (1.7 GB)** — 23.6 GB total, ~30 tok/s single-stream. Tradeoffs: 35K less context and one slot (concurrent requests queue instead of interleaving), which is the right trade for a single-agent workload.
 
 ```bash
-llama-server -m <model.gguf> \
-  --mmproj <mmproj-F16.gguf> \
+llama-server \
+  -m ~/.cache/huggingface/hub/models--unsloth--Qwen3.8-27B-GGUF/snapshots/*/Qwen3.8-27B-UD-Q4_K_XL.gguf \
+  --mmproj ~/llama.cpp/mmproj-F16.gguf \
   --host <lan-ip> \
   -c 98304 --parallel 1 \
   -ngl 99 -fa on \
   --cache-type-k q8_0 --cache-type-v q8_0 \
   --spec-type draft-mtp \
-  --spec-draft-model mtp-Qwen3.8-27B-Q4_0.gguf
+  --spec-draft-model ~/llama.cpp/mtp-Qwen3.8-27B-Q4_0.gguf \
+  --chat-template-kwargs '{"reasoning_effort":"medium"}'
 ```
+
+(That's the complete final launcher, verbatim — it lives on the server as `llama-server-start.sh`. The MTP head downloads from `ggml-org/Qwen3.8-27B-GGUF` on HF; grab the `mtp-Qwen3.8-27B-Q4_0.gguf` variant. Two build gotchas: a source build without TLS support rejects `-hf` at startup — hence the explicit `-m` snapshot path — and `-fa` requires an explicit `on`.)
 
 ## Lessons worth keeping
 
