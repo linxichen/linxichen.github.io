@@ -1,0 +1,140 @@
+---
+title: "Fitting Qwen3.8-27B with 128K Context on a 24GB TITAN RTX: A Self-Hosting Tuning Journey"
+date: 2026-08-17T12:30:00-04:00
+categories:
+  - Tutorial
+tags:
+  - self-hosting
+  - llama-cpp
+  - qwen
+  - homelab
+  - llm
+---
+
+My agent (Hermes, running on a Mac mini in the house) was "hanging" whenever it talked to my freshly deployed local model server. The server was up, health checks passed, small requests worked — but the moment a real conversation landed, nothing came back for eight minutes. This post is the story of diagnosing that, and the arithmetic that turned a 116 tok/s server into a 600 tok/s (7,752 tok/s cached) server on the same hardware.
+
+## The setup
+
+- **Host**: Dell R7910 (the VM "LinAn" on my XCP-ng GPU box), 16 cores, 64 GB RAM
+- **GPU**: NVIDIA TITAN RTX — 24 GB VRAM, Turing (compute capability 7.5)
+- **Model**: `unsloth/Qwen3.8-27B-GGUF` at **UD-Q4_K_XL** (~17.9 GB on disk)
+- **Server**: `llama-server` from llama.cpp, serving an OpenAI-compatible API at `http://192.168.1.204:8080/v1`
+
+Qwen3.8-27B is a native vision-language model with a 262K context window. I wanted it local, wired into my agent as a named provider ("LinxiCloud"), so my chat traffic stops depending on any cloud API.
+
+## The symptom
+
+The agent sent a routine ~54,000-token prompt (system prompt + tools + conversation history — agents are prompt-heavy by nature). The server log told the story:
+
+```
+slot print_timing: prompt processing, n_tokens = 51585, progress = 0.45, t = 480.14 s / 107.44 tokens per second
+slot release: task 25 | stop processing: n_tokens = 53633
+```
+
+**~107 tokens per second of prompt processing.** At that speed, a 54K prompt takes over eight minutes *before the first generated token*. My agent's HTTP client had long since timed out, retried, and given up. The server was never broken — it was just too slow to look alive.
+
+## First wrong theory: Vulkan vs CUDA
+
+llama.cpp stopped shipping prebuilt Linux CUDA binaries, so my first launch used the official **Vulkan** build. A friend asked the obvious question: "wait, is it not running on CUDA? I see it in nvidia-smi."
+
+Good question, and worth being precise about: **Vulkan compute still runs on the GPU.** `nvidia-smi` showed the process and ~21.6 GB of VRAM in use the whole time. CUDA vs Vulkan is about *which kernel API llama.cpp uses*, not *whether* the GPU is used. Still, CUDA kernels are usually noticeably faster, so I did the upgrade properly:
+
+1. `sudo apt install nvidia-cuda-toolkit cmake` (toolkit 12.0; driver reports 12.8 — same major version, fine)
+2. `git clone --depth 1 https://github.com/ggml-org/llama.cpp`
+3. `cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=75` ← Turing
+4. `cmake --build build -j16` (~10 minutes on 16 cores)
+5. `sudo cmake --install build --prefix /usr/local`, plus one gotcha: the installed `llama-server` couldn't find `libllama-server-impl.so` until I added `/usr/local/lib` to the loader config and ran `sudo ldconfig`.
+
+Then I re-ran the same 27K-token benchmark. Result: **116 tok/s. Identical to Vulkan.**
+
+CUDA was never the bottleneck. Time to do the math.
+
+## The actual bottleneck: KV cache doesn't fit in VRAM
+
+### What the KV cache is
+
+A transformer's attention layer, when generating token *N*, needs to look at the keys and values of **every previous token**. Recomputing those from scratch each step would be quadratic madness, so inference engines cache them: the **KV cache** stores, for every token in the context and every attention layer, a K vector and a V vector.
+
+The cost per token is:
+
+```
+KV bytes/token = 2 (K and V) × n_kv_heads × head_dim × n_attention_layers × bytes_per_element
+```
+
+For Qwen3.8-27B specifically, the architecture is hybrid — and this is the fun wrinkle. Of its 64 layers, **48 are Gated DeltaNet** (linear attention with a *constant-size* recurrent state — it doesn't grow with context at all) and only **16 are full Gated Attention** layers with 4 KV heads of dimension 256. So:
+
+```
+16 layers × 2 × 4 heads × 256 dim = 32,768 elements per token
+                                        = 64 KiB/token at f16
+                                        ≈ 34 KiB/token at q8_0
+```
+
+That hybrid design is why this model's long context is even *approachable* on consumer VRAM — a dense 64-layer model with the same head config would cost 4× more.
+
+### The budget
+
+The TITAN RTX has 24,576 MiB, of which about **23.8 GB is usable**. The bill:
+
+| Item | Size |
+|---|---|
+| Model weights (UD-Q4_K_XL) | ~17.9 GB |
+| Compute buffers (CUDA/graph overhead) | ~1.2–1.5 GB |
+| **Left for KV cache** | **~4.5 GB** |
+
+Now the KV cache demands:
+
+| Context | f16 KV | q8_0 KV |
+|---|---|---|
+| 262,144 (full window) | ~17.2 GB | ~9.1 GB |
+| 131,072 | ~8.6 GB | **~4.6 GB** ✓ |
+
+There it is. My original launch used `-c 262144` with default f16 KV — a **17.2 GB** cache demand on top of a 17.9 GB model. Total ~36 GB against 24 GB of VRAM. llama.cpp doesn't refuse; it silently overflows the excess into system RAM (the process RSS confirmed it: ~20 GB of host memory). Every attention pass during prompt processing then straddles PCIe, and throughput collapses to ~116 tok/s — on CUDA or Vulkan alike. The backend was innocent; the *spill* was guilty.
+
+### The fix
+
+Drop the context to 128K (still enormous for real conversations) and quantize the KV cache to `q8_0` (8-bit — quality impact on KV is well under measurement noise for chat/agentic use):
+
+```bash
+/usr/local/bin/llama-server \
+  -hf unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_XL \
+  --mmproj ~/llama.cpp/mmproj-F16.gguf \
+  --host 192.168.1.204 \
+  -c 131072 \
+  -ngl 99 \
+  -fa on \
+  --cache-type-k q8_0 \
+  --cache-type-v q8_0 \
+  --chat-template-kwargs '{"reasoning_effort":"medium"}'
+```
+
+Flag by flag:
+
+- **`-c 131072`** — context sized so the KV cache *plus* model *plus* compute fits VRAM with margin, per the table above. Observed total: 23.1 GB of 24 GB.
+- **`-ngl 99`** — all 64 layers offloaded to the GPU; nothing splits to CPU.
+- **`-fa on`** — FlashAttention. Required if you quantize the V cache (older `-fa` boolean syntax is gone in current builds — it now takes `on|off|auto`).
+- **`--cache-type-k/--cache-type-v q8_0`** — halves KV bytes per token (64 → ~34 KiB).
+- **`--mmproj`** — the vision projector (this is a VLM; note the path must point at a real local file — `-hf repo/mmproj-F16.gguf` inside `--mmproj` failed with a confusing "file does not exist" on my build, so I downloaded it explicitly).
+- **`--chat-template-kwargs '{"reasoning_effort":"medium"}'`** — Qwen3.8 thinks by default at "xhigh"; medium is the right speed/quality tradeoff for an agent workhorse.
+
+## Results
+
+Same 27,220-token benchmark:
+
+| Config | Prompt processing |
+|---|---|
+| 262K ctx, f16 KV, Vulkan | ~116 tok/s |
+| 262K ctx, f16 KV, CUDA | ~116 tok/s (spill-bound) |
+| **131K ctx, q8_0 KV, CUDA, FA** | **600 tok/s cold, 7,752 tok/s cached** |
+
+That last number deserves explanation: llama.cpp keeps a **prompt cache** of processed tokens per slot. When the same prefix arrives again (an agent resends its system prompt + history with one new message appended), only the delta is processed. The 54K prompt that started this whole saga went from *eight minutes* to **45 seconds cold and ~3.5 seconds warm**. The agent, in other words, now gets answers faster than I type follow-ups.
+
+## Lessons worth keeping
+
+1. **GPU usage ≠ GPU-resident.** `nvidia-smi` showing the process and VRAM in use tells you nothing about whether attention is spilling to system RAM. Check the process RSS against the model size, and llama.cpp's buffer logs for "CUDA0" vs "CPU" assignments.
+2. **Do the KV arithmetic before choosing `-c`.** `bytes/token = 2 × kv_heads × head_dim × attn_layers × dtype_bytes`, and check hybrid architectures — DeltaNet/linear-attention layers often don't grow with context at all, which changes the calculus dramatically.
+3. **The backend wasn't the problem.** CUDA is still worth having (and the source build is 15 minutes with `cmake --install` + `ldconfig`), but a VRAM overflow pins you at CPU speed no matter which kernel API renders the matmuls.
+4. **Quantize the KV cache fearlessly.** q8_0 KV is essentially free accuracy-wise and literally doubles the context you can afford.
+5. **Server "not responding" usually means "responding slowly."** Health checks and tiny curls pass; the failure only shows at production prompt sizes. Benchmark with a *real* 27K+ prompt before declaring victory.
+6. **Prebuilt Linux CUDA binaries are gone** from llama.cpp releases — budget 15 minutes for the source build, `sudo cmake --install --prefix /usr/local`, and remember `ldconfig`.
+
+The server now backs a named provider in my agent's config — any session can switch to it with `/model custom:LinxiCloud:...` — and the whole stack (quantized weights, KV budget, flash attention, prompt caching) fits in one aging-but-game Turing card. Self-hosting a frontier-adjacent 27B VLM at agent-scale context sizes on 2018 silicon is, it turns out, mostly an accounting exercise.
