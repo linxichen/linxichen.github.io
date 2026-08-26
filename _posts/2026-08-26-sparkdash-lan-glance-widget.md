@@ -1,6 +1,6 @@
 ---
 title: "sparkDash on the LAN + a Glance widget for it"
-date: 2026-08-26T15:00:00-04:00
+date: 2026-08-26T14:00:00-04:00
 categories:
   - Notes
 tags:
